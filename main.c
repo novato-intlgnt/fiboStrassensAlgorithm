@@ -6,39 +6,58 @@
 #include <string.h>
 #include <time.h>
 
-#define STEP 10
-#define MAX_SIZE 1000
-#define REPS 40.0
+#define STEP 1
+#define MAX_SIZE 2
+#define REPS 12
 #define MIN_SIZE 5
-#define ROWS 2
-#define COLS 2
+#define ROWS MAX_SIZE
+#define COLS MAX_SIZE
 
-static void multOrdMatrix(const int *matrixA, const int *matrixB, int *matrixC,
-                          int n) {
+int myPow(int a, int n) {
+  if (n == 0) {
+    return 1;
+  }
+  if (n == 1) {
+    return a;
+  }
+
+  int res = myPow(a, n / 2);
+  return (res * res * myPow(a, n % 2));
+}
+
+static void multOrdMatrix(int n, const int *matrixA, const int *matrixB,
+                          int *matrixC) {
   for (int i = 0; i < n; i++) {
-    for (int j = 0; j < n; i++) {
-      matrixC[i * n + j] = 0;
+    for (int j = 0; j < n; j++) {
       for (int k = 0; k < n; k++) {
-        matrixC[i * n + j] += matrixA[i * n + j] * matrixB[j * n + k];
+        // C[i][j] += A[i][k] * B[k][j]
+        matrixC[i * n + j] += matrixA[i * n + k] * matrixB[k * n + j];
       }
     }
   }
 }
 
-static void multDCMatrix(const int *matrixA, const int *matrixB, int *matrixC,
-                         int n) {
-  if (n == 1) {
-    matrixC[0] = matrixA[0] * matrixB[0];
+// Without offsets, is simple but reserve more memory
+static void multDCMatrix(int n, const int *matrixA, const int *matrixB,
+                         int *matrixC) {
+  if (n == 2) {
+    multOrdMatrix(n, matrixA, matrixB, matrixC);
     return;
   }
 
   int size = n / 2;
   int bytes = size * size * sizeof(int);
 
-  int *matA_A = malloc(bytes), *matA_B = malloc(bytes), *matA_C = malloc(bytes),
-      *matA_D = malloc(bytes);
-  int *matB_E = malloc(bytes), *matB_F = malloc(bytes), *matB_G = malloc(bytes),
-      *matB_H = malloc(bytes);
+  int *matA_A = NULL, *matA_B = NULL, *matA_C = NULL, *matA_D = NULL;
+  int *matB_E = NULL, *matB_F = NULL, *matB_G = NULL, *matB_H = NULL;
+  matA_A = malloc(bytes);
+  matA_B = malloc(bytes);
+  matA_C = malloc(bytes);
+  matA_D = malloc(bytes);
+  matB_E = malloc(bytes);
+  matB_F = malloc(bytes);
+  matB_G = malloc(bytes);
+  matB_H = malloc(bytes);
 
   int *p1 = calloc(size * size, sizeof(int)),
       *p2 = calloc(size * size, sizeof(int));
@@ -56,70 +75,53 @@ static void multDCMatrix(const int *matrixA, const int *matrixB, int *matrixC,
       matB_H[i * size + j] = matrixB[(i + size) * n + (j + size)];
     }
   }
-}
 
-static void merge(int arr[], int left, int mid, int right) {
-  int leftSize = mid - left + 1;
-  int rightSize = right - mid;
+  // Cr = (Aa*Be) + (Ab*Bg)
+  multDCMatrix(size, matA_A, matB_E, p1);
+  multDCMatrix(size, matA_B, matB_G, p2);
+  for (int i = 0; i < size * size; i++)
+    matrixC[(i / size) * n + (i % size)] = p1[i] + p2[i];
 
-  int *leftArr = (int *)malloc(leftSize * sizeof(int));
-  int *rightArr = (int *)malloc(rightSize * sizeof(int));
+  // Cs = (Aa*Bf) + (Ab*Bh)
+  for (int i = 0; i < size * size; i++) {
+    p1[i] = 0;
+    p2[i] = 0;
+  } // Reset temporales
+  multDCMatrix(size, matA_A, matB_F, p1);
+  multDCMatrix(size, matA_B, matB_H, p2);
+  for (int i = 0; i < size * size; i++)
+    matrixC[(i / size) * n + (i % size + size)] = p1[i] + p2[i];
 
-  if (leftArr == NULL || rightArr == NULL) {
-    fprintf(stderr, "Error: no se pudo reservar memoria en merge()\n");
-    free(leftArr);
-    free(rightArr);
-    exit(EXIT_FAILURE);
+  // Ct = (Ac*Be) + (Ad*Bg)
+  for (int i = 0; i < size * size; i++) {
+    p1[i] = 0;
+    p2[i] = 0;
   }
+  multDCMatrix(size, matA_C, matB_E, p1);
+  multDCMatrix(size, matA_D, matB_G, p2);
+  for (int i = 0; i < size * size; i++)
+    matrixC[((i / size) + size) * n + (i % size)] = p1[i] + p2[i];
 
-  for (int i = 0; i < leftSize; i++) {
-    leftArr[i] = arr[left + i];
+  // Cu = (Ac*Bf) + (Ad*Bh)
+  for (int i = 0; i < size * size; i++) {
+    p1[i] = 0;
+    p2[i] = 0;
   }
+  multDCMatrix(size, matA_C, matB_F, p1);
+  multDCMatrix(size, matA_D, matB_H, p2);
+  for (int i = 0; i < size * size; i++)
+    matrixC[((i / size) + size) * n + (i % size + size)] = p1[i] + p2[i];
 
-  for (int j = 0; j < rightSize; j++) {
-    rightArr[j] = arr[mid + 1 + j];
-  }
-
-  int i = 0;
-  int j = 0;
-  int k = left;
-
-  while (i < leftSize && j < rightSize) {
-    if (leftArr[i] <= rightArr[j]) {
-      arr[k++] = leftArr[i++];
-    } else {
-      arr[k++] = rightArr[j++];
-    }
-  }
-
-  while (i < leftSize) {
-    arr[k++] = leftArr[i++];
-  }
-
-  while (j < rightSize) {
-    arr[k++] = rightArr[j++];
-  }
-
-  free(leftArr);
-  free(rightArr);
-}
-
-static void mergeSortRecursive(int arr[], int left, int right) {
-  if (left >= right) {
-    return;
-  }
-
-  int mid = left + (right - left) / 2;
-
-  mergeSortRecursive(arr, left, mid);
-  mergeSortRecursive(arr, mid + 1, right);
-  merge(arr, left, mid, right);
-}
-
-static void mergeSort(int arr[], int n) {
-  if (n > 1) {
-    mergeSortRecursive(arr, 0, n - 1);
-  }
+  free(matA_A);
+  free(matA_B);
+  free(matA_C);
+  free(matA_D);
+  free(matB_E);
+  free(matB_F);
+  free(matB_G);
+  free(matB_H);
+  free(p1);
+  free(p2);
 }
 
 static void genRandomSquareMatrix(int *matrix, int n, int maxValue) {
@@ -143,18 +145,19 @@ static double measureOrdMulti(const int *matrixA, const int *matrixB,
   struct timespec end;
 
   clock_gettime(CLOCK_MONOTONIC, &start);
-  multOrdMatrix(matrixA, matrixB, matrixC, n);
+  multOrdMatrix(n, matrixA, matrixB, matrixC);
   clock_gettime(CLOCK_MONOTONIC, &end);
 
   return (double)elapsedNanoseconds(start, end) / 1000.0;
 }
 
-static double measureMergeSort(int baseArr[], int n) {
+static double measuremultDCMulti(const int *matrixA, const int *matrixB,
+                                 int *matrixC, int n) {
   struct timespec start;
   struct timespec end;
 
   clock_gettime(CLOCK_MONOTONIC, &start);
-  mergeSort(baseArr, n);
+  multDCMatrix(n, matrixA, matrixB, matrixC);
   clock_gettime(CLOCK_MONOTONIC, &end);
 
   return (double)elapsedNanoseconds(start, end) / 1000.0;
@@ -163,33 +166,42 @@ static double measureMergeSort(int baseArr[], int n) {
 int main(void) {
   srand((unsigned int)time(NULL));
 
-  printf("# n insertion_us insertion_error merge_us merge_error\n");
+  printf("# n ord_us dc_us\n");
 
-  size_t totalSize = ROWS * COLS * sizeof(int);
-  int *baseMatrix = (int *)malloc(totalSize);
+  for (int n = 1; n <= REPS; n++) {
+    int pow2 = myPow(2, n);
+    size_t totalSize = (size_t)pow2 * pow2 * sizeof(int);
 
-  for (int n = 2; n <= REPS; n += STEP) {
-    int *matrixA = (int *)malloc(totalSize);
-    int *matrixB = (int *)malloc(totalSize);
-    int *matrixC = (int *)malloc(totalSize);
-    int *matrixD = (int *)malloc(totalSize);
+    // baseMatrix se aloca con el tamaño correcto en cada iteración
+    int *baseMatrix = malloc(totalSize);
+    int *matrixA = malloc(totalSize);
+    int *matrixB = malloc(totalSize);
+    int *matrixC = calloc((size_t)pow2 * pow2, sizeof(int));
+    int *matrixD = calloc((size_t)pow2 * pow2, sizeof(int));
 
-    if (matrixA == NULL || matrixB == NULL || matrixC == NULL) {
-      fprintf(stderr, "Error: no se pudo reservar memoria para n=%d\n", n);
+    if (baseMatrix == NULL || matrixA == NULL || matrixB == NULL ||
+        matrixC == NULL || matrixD == NULL) {
+      fprintf(stderr, "Error: no se pudo reservar memoria para n=%d\n", pow2);
+      free(baseMatrix);
+      free(matrixA);
+      free(matrixB);
+      free(matrixC);
+      free(matrixD);
       return EXIT_FAILURE;
     }
 
-    genRandomSquareMatrix(baseMatrix, n, 100);
-    memcpy(baseMatrix, matrixA, totalSize);
-    memcpy(baseMatrix, matrixB, totalSize);
-    double ordMultTemp = measureOrdMulti(matrixA, matrixB, matrixC, n);
-    double mergeTime = measureMergeSort(baseMatrix, n);
+    genRandomSquareMatrix(baseMatrix, pow2, 100);
+    memcpy(matrixA, baseMatrix, totalSize);
+    memcpy(matrixB, baseMatrix, totalSize);
+    double ordMultTemp = measureOrdMulti(matrixA, matrixB, matrixC, pow2);
+    double multDCTemp = measuremultDCMulti(matrixA, matrixB, matrixD, pow2);
 
-    printf("%d %.3f %.3f\n", n, ordMultTemp, mergeTime);
+    printf("%d %.3f %.3f\n", pow2, ordMultTemp, multDCTemp);
     free(baseMatrix);
     free(matrixA);
     free(matrixB);
     free(matrixC);
+    free(matrixD);
   }
   return EXIT_SUCCESS;
 }
