@@ -1,7 +1,7 @@
 set terminal pngcairo size 800,600
 set output './proofs/graph.png'
 
-set title "Análisis Empírico: Insertion Sort vs Merge Sort"
+set title "Análisis Empírico: Multiplicacion de Matrices"
 set xlabel "Tamaño de entrada (n)"
 set ylabel "Tiempo (microsegundos)"
 set key top left

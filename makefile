@@ -1,6 +1,5 @@
-CC = gcc
-#CFLAGS = -O2 -std=c11 -Wall -Wextra -pedantic -march=native -lm
-CFLAGS = -O2 -std=c11 -Wall -Wextra -pedantic -march=native
+CXX = g++
+CXXFLAGS = -O2 -std=c++17 -Wall -Wextra -pedantic -march=native
 TARGET = main
 DATA = results.dat
 SCRIPT = plot.gp
@@ -15,8 +14,8 @@ $(GRAPH): $(DATA) $(SCRIPT)
 $(DATA): $(TARGET)
 	./$(TARGET) > $(DATA)
 
-$(TARGET): main.c
-	$(CC) $(CFLAGS) main.c -o $(TARGET) -lm
+$(TARGET): main.cc
+	$(CXX) $(CXXFLAGS) main.cc -o $(TARGET)
 
 clean:
 	rm -f $(TARGET) $(DATA) $(GRAPH)
