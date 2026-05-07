@@ -110,6 +110,87 @@ static void multDCMatrix(int n, const Matrix &matrixA, int rowA, int colA,
                colC + size); // (Ad*Bh)
 }
 
+void addMat(int n, const Matrix &matrixA, int rowA, int colA,
+            const Matrix &matrixB, int rowB, int colB, Matrix &dest) {
+  for (int i = 0; i < n; i++)
+    for (int j = 0; j < n; j++)
+      dest(i, j) = matrixA(rowA + i, colA + j) + matrixB(rowB + i, colB + j);
+}
+void subMat(int n, const Matrix &matrixA, int rowA, int colA,
+            const Matrix &matrixB, int rowB, int colB, Matrix &dest) {
+  for (int i = 0; i < n; i++)
+    for (int j = 0; j < n; j++)
+      dest(i, j) = matrixA(rowA + i, colA + j) - matrixB(rowB + i, colB + j);
+}
+
+static void multStrassenMat(int n, const Matrix &matrixA, int rowA, int colA,
+                            const Matrix &matrixB, int rowB, int colB,
+                            Matrix &matrixC, int rowC, int colC) {
+
+  if (n <= THRESHOLD) {
+    multiply_iter(n, matrixA, matrixB, matrixC, rowA, colA, rowB, colB, rowC,
+                  colC);
+    return;
+  }
+  int size = n / 2;
+  Matrix P1(size), P2(size), P3(size), P4(size), P5(size), P6(size), P7(size),
+      auxA(size), auxB(size);
+
+  // P1 = Aa * (Bf - Bh)
+  subMat(size, matrixB, rowB, colB + size, matrixB, rowB + size, colB + size,
+         auxB);
+  multStrassenMat(size, matrixA, rowA, colA, auxB, 0, 0, P1, 0, 0);
+
+  // P2 = (Aa + Ab) * Bh
+  addMat(size, matrixA, rowA, colA, matrixA, rowA, colA + size, auxA);
+  multStrassenMat(size, auxA, 0, 0, matrixB, rowB + size, colB + size, P2, 0,
+                  0);
+
+  // P3 = (Ac + Ad) * Be
+  addMat(size, matrixA, rowA + size, colA, matrixA, rowA + size, colA + size,
+         auxA);
+  multStrassenMat(size, auxA, 0, 0, matrixB, rowB, colB, P3, 0, 0);
+
+  // P4 = Ad * (Bg - Be)
+  subMat(size, matrixB, rowB + size, colB, matrixB, rowB, colB, auxB);
+  multStrassenMat(size, matrixA, rowA + size, colA + size, auxB, 0, 0, P4, 0,
+                  0);
+
+  // P5 = (Aa + Ad) * (Be + Bh)
+  addMat(size, matrixA, rowA, colA, matrixA, rowA + size, colA + size, auxA);
+  addMat(size, matrixB, rowB + size, colB, matrixB, rowB, colB, auxB);
+  multStrassenMat(size, auxA, 0, 0, auxB, 0, 0, P5, 0, 0);
+
+  // P6 = (Ab - Ad) * (Bg + Bh)
+  subMat(size, matrixA, rowA, colA + size, matrixA, rowA + size, colA + size,
+         auxA);
+  addMat(size, matrixB, rowB + size, colB, matrixB, rowB + size, colB + size,
+         auxB);
+  multStrassenMat(size, auxA, 0, 0, auxB, 0, 0, P6, 0, 0);
+
+  // P7 = (Aa - Ac) * (Be + Bf)
+  subMat(size, matrixA, rowA, colA, matrixA, rowA + size, colA, auxA);
+  addMat(size, matrixB, rowB, colB, matrixB, rowB, colB + size, auxB);
+  multStrassenMat(size, auxA, 0, 0, auxB, 0, 0, P7, 0, 0);
+
+  for (int i = 0; i < size; i++) {
+    for (int j = 0; j < size; j++) {
+      // r = p5 + p4 - p2 + p6
+      matrixC(rowC + i, colC + j) = P5(i, j) + P4(i, j) - P2(i, j) + P6(i, j);
+
+      // s = p1 + p2
+      matrixC(rowC + i, colC + j + size) = P1(i, j) + P2(i, j);
+
+      // t = p3 + p4
+      matrixC(rowC + i + size, colC + j) = P3(i, j) + P4(i, j);
+
+      // u = p5 + p1 - p3 - p7
+      matrixC(rowC + i + size, colC + j + size) =
+          P5(i, j) + P1(i, j) - P3(i, j) + P7(i, j);
+    }
+  }
+}
+
 static void genRandomSquareMatrix(Matrix &matrix, int n, int maxValue) {
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < n; j++) {
@@ -152,29 +233,48 @@ static double measuremultDCMulti(int n, const Matrix &matrixA, int rowA,
   return (double)elapsedNanoseconds(start, end) / 1000.0;
 }
 
+static double measuremultStraMulti(int n, const Matrix &matrixA, int rowA,
+                                   int colA, const Matrix &matrixB, int rowB,
+                                   int colB, Matrix &matrixC, int rowC,
+                                   int colC) {
+  struct timespec start;
+  struct timespec end;
+
+  clock_gettime(CLOCK_MONOTONIC, &start);
+  multStrassenMat(n, matrixA, rowA, colA, matrixB, rowB, colB, matrixC, rowC,
+                  colC);
+  clock_gettime(CLOCK_MONOTONIC, &end);
+
+  return (double)elapsedNanoseconds(start, end) / 1000.0;
+}
+
 int main(void) {
   srand((unsigned int)time(NULL));
 
-  printf("# n ord_us dc_us\n");
+  printf("# n ord_us dc_us st_us\n");
 
   for (int n = 1; n <= REPS; n++) {
     int size = myPow(2, n);
     int totalSize = size * size;
 
-    Matrix baseMatrix(size), matrixA(size), matrixB(size), matrixC(size),
-        matrixD(size);
+    Matrix baseMatrix(size), matrixA(size), matrixB(size), matrixC(size);
 
     genRandomSquareMatrix(baseMatrix, size, 100);
     memcpy(matrixA.getData(), baseMatrix.getData(), totalSize * sizeof(int));
     memcpy(matrixB.getData(), baseMatrix.getData(), totalSize * sizeof(int));
+
     memset(matrixC.getData(), 0, totalSize * sizeof(int));
-    memset(matrixD.getData(), 0, totalSize * sizeof(int));
-
     double ordMultTemp = measureOrdMulti(size, matrixA, matrixB, matrixC);
-    double multDCTemp =
-        measuremultDCMulti(size, matrixA, 0, 0, matrixB, 0, 0, matrixD, 0, 0);
 
-    printf("%d %.3f %.3f\n", size, ordMultTemp, multDCTemp);
+    memset(matrixC.getData(), 0, totalSize * sizeof(int));
+    double multDCTemp =
+        measuremultDCMulti(size, matrixA, 0, 0, matrixB, 0, 0, matrixC, 0, 0);
+
+    memset(matrixC.getData(), 0, totalSize * sizeof(int));
+    double multStraTemp =
+        measuremultStraMulti(size, matrixA, 0, 0, matrixB, 0, 0, matrixC, 0, 0);
+
+    printf("%d %.3f %.3f %.3f\n", size, ordMultTemp, multDCTemp, multStraTemp);
   }
   return EXIT_SUCCESS;
 }

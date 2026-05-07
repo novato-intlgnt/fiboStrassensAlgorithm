@@ -8,5 +8,6 @@ set key top left
 set grid
 
 plot "results.dat" using 1:2 with linespoints title "ordSort", \
-     "results.dat" using 1:3 with linespoints title "DC-Sort"
+     "results.dat" using 1:3 with linespoints title "DC-Sort", \
+     "results.dat" using 1:4 with linespoints title "ST-Sort"
 
