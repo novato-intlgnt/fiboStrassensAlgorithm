@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#include <algorithm>
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -7,10 +8,10 @@
 #include <time.h>
 
 #define STEP 1
-#define MAX_SIZE 2
-#define REPS 12
+#define MAX_SIZE 12
+#define REPS 10
 #define MIN_SIZE 5
-#define THRESHOLD 32
+#define THRESHOLD 64
 
 struct Matrix {
   int _n;
@@ -248,33 +249,52 @@ static double measuremultStraMulti(int n, const Matrix &matrixA, int rowA,
   return (double)elapsedNanoseconds(start, end) / 1000.0;
 }
 
+double calculateMedian(double *arr, int n) {
+  std::sort(arr, arr + n);
+  if (n % 2 == 0) {
+    return (arr[n / 2 - 1] + arr[n / 2]) / 2.0;
+  } else {
+    return arr[n / 2];
+  }
+}
 int main(void) {
   srand((unsigned int)time(NULL));
 
   printf("# n ord_us dc_us st_us\n");
 
-  for (int n = 1; n <= REPS; n++) {
+  for (int n = 1; n <= MAX_SIZE; n++) {
     int size = myPow(2, n);
-    int totalSize = size * size;
+    size_t totalElements = (size_t)size * size;
+    size_t totalSizeBytes = totalElements * sizeof(int);
 
-    Matrix baseMatrix(size), matrixA(size), matrixB(size), matrixC(size);
-
+    Matrix baseMatrix(size);
     genRandomSquareMatrix(baseMatrix, size, 100);
-    memcpy(matrixA.getData(), baseMatrix.getData(), totalSize * sizeof(int));
-    memcpy(matrixB.getData(), baseMatrix.getData(), totalSize * sizeof(int));
 
-    memset(matrixC.getData(), 0, totalSize * sizeof(int));
-    double ordMultTemp = measureOrdMulti(size, matrixA, matrixB, matrixC);
+    double tmpORD[REPS], tmpDC[REPS], tmpSTRA[REPS];
 
-    memset(matrixC.getData(), 0, totalSize * sizeof(int));
-    double multDCTemp =
-        measuremultDCMulti(size, matrixA, 0, 0, matrixB, 0, 0, matrixC, 0, 0);
+    for (int i = 0; i < REPS; i++) {
+      Matrix matrixA(size), matrixB(size), matrixC(size);
 
-    memset(matrixC.getData(), 0, totalSize * sizeof(int));
-    double multStraTemp =
-        measuremultStraMulti(size, matrixA, 0, 0, matrixB, 0, 0, matrixC, 0, 0);
+      memcpy(matrixA.getData(), baseMatrix.getData(), totalSizeBytes);
+      memcpy(matrixB.getData(), baseMatrix.getData(), totalSizeBytes);
 
-    printf("%d %.3f %.3f %.3f\n", size, ordMultTemp, multDCTemp, multStraTemp);
+      memset(matrixC.getData(), 0, totalSizeBytes);
+      tmpORD[i] = measureOrdMulti(size, matrixA, matrixB, matrixC);
+
+      memset(matrixC.getData(), 0, totalSizeBytes);
+      tmpDC[i] =
+          measuremultDCMulti(size, matrixA, 0, 0, matrixB, 0, 0, matrixC, 0, 0);
+
+      memset(matrixC.getData(), 0, totalSizeBytes);
+      tmpSTRA[i] = measuremultStraMulti(size, matrixA, 0, 0, matrixB, 0, 0,
+                                        matrixC, 0, 0);
+    }
+
+    double medianORD = calculateMedian(tmpORD, REPS);
+    double medianDC = calculateMedian(tmpDC, REPS);
+    double medianSTRA = calculateMedian(tmpSTRA, REPS);
+
+    printf("%d %.3f %.3f %.3f\n", size, medianORD, medianDC, medianSTRA);
   }
   return EXIT_SUCCESS;
 }
